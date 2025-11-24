@@ -120,6 +120,7 @@ function commandsModule({
 }: OhifTypes.Extensions.ExtensionParams): OhifTypes.Extensions.CommandsModule {
   const {
     viewportGridService,
+    toolbarService,
     toolGroupService,
     cineService,
     uiDialogService,
@@ -157,6 +158,25 @@ function commandsModule({
       segmentationId,
       segmentIndex: activeSegmentIndex,
     };
+  }
+
+  function _handleBrushSizeAction(action: 'increase' | 'decrease') {
+    const toolGroupIds = toolGroupService.getToolGroupIds();
+    if (!toolGroupIds?.length) {
+      return;
+    }
+
+    for (const toolGroupId of toolGroupIds) {
+      const brushSize = segmentationUtils.getBrushSizeForToolGroup(toolGroupId);
+
+      const newBrushSize = action === 'increase' ? brushSize + 3 : brushSize - 3;
+
+      if (brushSize) {
+        segmentationUtils.setBrushSizeForToolGroup(toolGroupId, newBrushSize);
+
+        toolbarService.refreshToolbarState({ toolGroupId });
+      }
+    }
   }
 
   const actions = {
@@ -1627,15 +1647,13 @@ function commandsModule({
      * Stores a segmentation and shows it in the viewport
      * @param props.segmentationId - The ID of the segmentation to store
      */
-    storeSegmentationCommand: async ({ segmentationId }) => {
+    storeSegmentationCommand: async args => {
+      const { segmentationId } = args;
       const { segmentationService, viewportGridService } = servicesManager.services;
 
       const displaySetInstanceUIDs = await createReportAsync({
         servicesManager,
-        getReport: () =>
-          commandsManager.runCommand('storeSegmentation', {
-            segmentationId,
-          }),
+        getReport: () => commandsManager.runCommand('storeSegmentation', args),
         reportType: 'Segmentation',
       });
 
@@ -1741,6 +1759,16 @@ function commandsModule({
     },
 
     /**
+     * Sets whether to render fill for inactive segmentations of a segmentation type
+     * @param props.type - The type of segmentation
+     * @param props.value - Whether to render fill for inactive segmentations
+     */
+    setRenderFillInactiveCommand: ({ type, value }) => {
+      const { segmentationService } = servicesManager.services;
+      segmentationService.setStyle({ type }, { renderFillInactive: value });
+    },
+
+    /**
      * Sets whether to render outline for a segmentation type
      * @param props.type - The type of segmentation
      * @param props.value - Whether to render outline
@@ -1751,13 +1779,36 @@ function commandsModule({
     },
 
     /**
-     * Sets the fill alpha for inactive segmentations
+     * Sets whether to render outline for inactive segmentations of a segmentation type
+     * @param props.type - The type of segmentation
+     * @param props.value - Whether to render outline for inactive segmentations
+     */
+    setRenderOutlineInactiveCommand: ({ type, value }) => {
+      const { segmentationService } = servicesManager.services;
+      segmentationService.setStyle({ type }, { renderOutlineInactive: value });
+    },
+
+    /**
+     * Sets the fill alpha for inactive segmentations.
+     * If no type is provided, the fill alpha for all types will be set.
      * @param props.type - The type of segmentation
      * @param props.value - The alpha value to set
      */
     setFillAlphaInactiveCommand: ({ type, value }) => {
       const { segmentationService } = servicesManager.services;
-      segmentationService.setStyle({ type }, { fillAlphaInactive: value });
+
+      if (type) {
+        segmentationService.setStyle({ type }, { fillAlphaInactive: value });
+      } else {
+        segmentationService.setStyle(
+          { type: SegmentationRepresentations.Labelmap },
+          { fillAlphaInactive: value }
+        );
+        segmentationService.setStyle(
+          { type: SegmentationRepresentations.Contour },
+          { fillAlphaInactive: value }
+        );
+      }
     },
 
     editSegmentLabel: async ({ segmentationId, segmentIndex }) => {
@@ -2025,17 +2076,11 @@ function commandsModule({
         segmentAI.initViewport(viewport);
       }
     },
-    setBrushSize: ({ value, toolNames }) => {
+    setBrushSize: ({ value }) => {
       const brushSize = Number(value);
 
       toolGroupService.getToolGroupIds()?.forEach(toolGroupId => {
-        if (toolNames?.length === 0) {
-          segmentationUtils.setBrushSizeForToolGroup(toolGroupId, brushSize);
-        } else {
-          toolNames?.forEach(toolName => {
-            segmentationUtils.setBrushSizeForToolGroup(toolGroupId, brushSize, toolName);
-          });
-        }
+        segmentationUtils.setBrushSizeForToolGroup(toolGroupId, brushSize);
       });
     },
     setThresholdRange: ({
@@ -2064,26 +2109,10 @@ function commandsModule({
       }
     },
     increaseBrushSize: () => {
-      const toolGroupIds = toolGroupService.getToolGroupIds();
-      if (!toolGroupIds?.length) {
-        return;
-      }
-
-      for (const toolGroupId of toolGroupIds) {
-        const brushSize = segmentationUtils.getBrushSizeForToolGroup(toolGroupId);
-        segmentationUtils.setBrushSizeForToolGroup(toolGroupId, brushSize + 3);
-      }
+      _handleBrushSizeAction('increase');
     },
     decreaseBrushSize: () => {
-      const toolGroupIds = toolGroupService.getToolGroupIds();
-      if (!toolGroupIds?.length) {
-        return;
-      }
-
-      for (const toolGroupId of toolGroupIds) {
-        const brushSize = segmentationUtils.getBrushSizeForToolGroup(toolGroupId);
-        segmentationUtils.setBrushSizeForToolGroup(toolGroupId, brushSize - 3);
-      }
+      _handleBrushSizeAction('decrease');
     },
     addNewSegment: () => {
       const { segmentationService } = servicesManager.services;
@@ -2294,7 +2323,6 @@ function commandsModule({
       const interpolationConfig = {
         interpolation: {
           enabled: interpolateContours,
-          showInterpolationPolyline: true,
         },
       };
       toolGroup.setToolConfiguration(activeTool, interpolationConfig);
@@ -2360,7 +2388,6 @@ function commandsModule({
           break;
         default:
           throw new Error('Unsupported logical operation');
-          break;
       }
     },
     copyContourSegment: ({
@@ -2712,8 +2739,14 @@ function commandsModule({
     setRenderFill: {
       commandFn: actions.setRenderFillCommand,
     },
+    setRenderFillInactive: {
+      commandFn: actions.setRenderFillInactiveCommand,
+    },
     setRenderOutline: {
       commandFn: actions.setRenderOutlineCommand,
+    },
+    setRenderOutlineInactive: {
+      commandFn: actions.setRenderOutlineInactiveCommand,
     },
     setFillAlphaInactive: {
       commandFn: actions.setFillAlphaInactiveCommand,
