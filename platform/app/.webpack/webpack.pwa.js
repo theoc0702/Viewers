@@ -31,6 +31,7 @@ const ENTRY_TARGET = process.env.ENTRY_TARGET || `${SRC_DIR}/index.js`;
 const Dotenv = require('dotenv-webpack');
 const writePluginImportFile = require('./writePluginImportsFile.js');
 // const MillionLint = require('@million/lint');
+const open = process.env.OHIF_OPEN !== 'false';
 
 const copyPluginFromExtensions = writePluginImportFile(SRC_DIR, DIST_DIR);
 
@@ -171,7 +172,7 @@ module.exports = (env, argv) => {
       // compress: true,
       // http2: true,
       // https: true,
-      open: true,
+      open,
       port: OHIF_PORT,
       client: {
         overlay: { errors: true, warnings: false },
