@@ -10,6 +10,7 @@ window.config = {
     "@pixilib/gaelo-panels-viewport.customizationModule.default",
     "@pixilib/gaelo-ohif-forms.customizationModule.loginRoute",
   ],
+  disableConfirmationPrompts: true,
   showStudyList: true,
   // some windows systems have issues with more than 3 web workers
   maxNumberOfWebWorkers: 3,
