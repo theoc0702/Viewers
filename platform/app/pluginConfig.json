@@ -89,6 +89,10 @@
     {
       "packageName": "@pixilib/hanging-protocol-manager",
       "version": "0.0.1"
+    },
+    {
+      "packageName": "@pixilib/volume-registration",
+      "version": "0.0.1"
     }
   ],
   "modes": [
